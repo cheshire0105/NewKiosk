@@ -145,7 +145,7 @@ struct KioskHomeView: View {
     }
 }
 
-// MARK: - 한 화면에서 카테고리별 메뉴와 장바구니, 결제를 진행하는 뷰
+// MARK: - 한 화면에서 카테고리별 메뉴와 장바구니를 확인하고 결제 화면으로 이동
 struct OneStopOrderView: View {
     @EnvironmentObject var accessibilitySettings: AccessibilitySettings
 
@@ -155,9 +155,6 @@ struct OneStopOrderView: View {
 
     // 장바구니
     @State private var cartItems: [String] = []
-
-    // 결제 결과 메시지
-    @State private var paymentStatus: String? = nil
 
     // 간단 샘플 메뉴(하드코딩)
     func sampleMenus(for category: String) -> [MenuItem] {
@@ -197,7 +194,7 @@ struct OneStopOrderView: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text("간편 주문/결제")
+            Text("간편 주문")
                 .font(dynamicFont(28)).bold()
                 .padding(.top)
 
@@ -307,50 +304,112 @@ struct OneStopOrderView: View {
             .cornerRadius(12)
             .padding(.horizontal)
 
-            // 결제 섹션
-            if let paymentStatus = paymentStatus {
-                Text(paymentStatus)
+            // "결제하기" 버튼 → 별도 PaymentView로 이동
+            NavigationLink(
+                destination: PaymentView(
+                    totalPrice: cartItems.count * 5000 // 간단히 개수 × 5000원으로 가정
+                ).environmentObject(accessibilitySettings)
+            ) {
+                Text("결제하기")
                     .font(dynamicFont(20)).bold()
-                    .foregroundColor(paymentStatus.contains("성공") ? .green : .red)
-                    .padding(.top, 8)
-                    .accessibilityLabel("결제 결과: \(paymentStatus)")
-            }
-
-            HStack(spacing: 16) {
-                // 카드 결제 버튼
-                ScalableButton {
-                    simulatePayment(success: true)
-                } label: {
-                    Text("카드 결제")
-                        .font(dynamicFont(18)).bold()
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(accessibilitySettings.isHighContrast ? Color.black : Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
-
-                // 현금 결제 버튼
-                ScalableButton {
-                    simulatePayment(success: false)
-                } label: {
-                    Text("현금 결제")
-                        .font(dynamicFont(18)).bold()
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(accessibilitySettings.isHighContrast ? Color.black : Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(accessibilitySettings.isHighContrast ? Color.black : Color.purple)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
             }
             .padding(.horizontal)
+            .accessibilityLabel("결제 화면으로 이동")
 
             Spacer()
         }
         .navigationBarTitle("간편 주문", displayMode: .inline)
     }
+}
 
-    // 결제 시뮬레이션 (실제 로직과는 다를 수 있음)
+// MARK: - 결제 전용 화면
+struct PaymentView: View {
+    @EnvironmentObject var accessibilitySettings: AccessibilitySettings
+    let totalPrice: Int
+
+    @State private var paymentStatus: String? = nil
+
+    // 폰트 동적 조절
+    func dynamicFont(_ baseSize: CGFloat) -> Font {
+        let size = accessibilitySettings.isLargeText ? baseSize + 4 : baseSize
+        return .system(size: size)
+    }
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("결제 화면")
+                .font(dynamicFont(28)).bold()
+                .padding(.top)
+
+            Text("총 결제 금액: ₩\(totalPrice)")
+                .font(dynamicFont(22)).bold()
+
+            // 안내문구: 카드를 꽂아주세요
+            Text("카드를 꽂아주세요")
+                .font(dynamicFont(20))
+                .padding(.bottom, 10)
+
+            // 실제 결제 시뮬레이션 (카드/현금)
+            HStack(spacing: 16) {
+                // 카드 결제 시뮬레이션 버튼
+                ScalableButton {
+                    simulatePayment(success: true)
+                } label: {
+                    VStack {
+                        Image(systemName: "creditcard.fill")
+                            .resizable()
+                            .frame(width: 40, height: 28)
+                        Text("카드 결제")
+                            .font(dynamicFont(16)).bold()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(accessibilitySettings.isHighContrast ? Color.black : Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+
+                // 현금 결제 시뮬레이션 버튼
+                ScalableButton {
+                    simulatePayment(success: false)
+                } label: {
+                    VStack {
+                        Image(systemName: "banknote.fill")
+                            .resizable()
+                            .frame(width: 40, height: 28)
+                        Text("현금 결제")
+                            .font(dynamicFont(16)).bold()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(accessibilitySettings.isHighContrast ? Color.black : Color.green)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+            }
+            .padding(.horizontal)
+
+            // 결제 결과 메시지
+            if let paymentStatus = paymentStatus {
+                Text(paymentStatus)
+                    .font(dynamicFont(18)).bold()
+                    .foregroundColor(paymentStatus.contains("성공") ? .green : .red)
+                    .padding(.top, 8)
+                    .accessibilityLabel("결제 결과: \(paymentStatus)")
+            }
+
+            Spacer()
+        }
+        .padding(.bottom, 20)
+        .navigationBarTitle("결제 진행", displayMode: .inline)
+    }
+
+    // 결제 시뮬레이션 로직
     func simulatePayment(success: Bool) {
         if success {
             paymentStatus = "결제 성공! 주문이 완료되었습니다."
@@ -471,8 +530,9 @@ struct HelpView: View {
 
                 Text("""
 - [주문하기] 버튼을 눌러 카테고리를 선택한 뒤, 원하는 메뉴를 선택하면 장바구니에 추가됩니다.
-- [결제하기] 버튼을 누르시면 카드/현금 결제를 진행할 수 있습니다.
-- [음성으로 주문하기] 화면에서 음성 명령으로 메뉴를 추가할 수 있습니다(실제 앱에서는 마이크 권한 필요).
+- 장바구니에서 [결제하기] 버튼을 누르시면 결제 화면으로 이동합니다.
+- 결제 화면에서 "카드를 꽂아주세요" 안내에 따라 카드 결제를 진행하시거나, 현금을 선택하실 수 있습니다.
+- [음성으로 주문하기] 화면에서는 음성 명령을 통해 메뉴를 담을 수 있습니다(실제 앱에서는 마이크 권한 필요).
 - [접근성 설정]에서 어린이/장애인/노인 모드를 위한 여러 옵션(글자 크게, 고대비 등)을 사용하세요.
 - 화면에 표시되는 안내 문구를 잘 확인하시고, 필요 시 [직원 호출] 버튼을 눌러 도움을 받으세요.
 """)
