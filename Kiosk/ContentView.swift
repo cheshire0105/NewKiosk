@@ -12,136 +12,130 @@ class AccessibilitySettings: ObservableObject {
 // MARK: - 메인(시작) 화면
 struct KioskHomeView: View {
     @StateObject private var accessibilitySettings = AccessibilitySettings()
-
-    // 매장 안내용 배너 텍스트 (간결하게)
     @State private var storeNotice: String = "신메뉴 '딸기 라떼' 할인 중!"
 
-    // 폰트 크기 동적 조절
+    // 색상 테마
+    let primaryColor = Color(#colorLiteral(red: 0.2392156869, green: 0.6745098233, blue: 0.9686274529, alpha: 1))
+    let secondaryColor = Color(#colorLiteral(red: 0.2196078449, green: 0.007843137719, blue: 0.8549019694, alpha: 1))
+    let backgroundColor = Color(#colorLiteral(red: 0.9568627477, green: 0.9568627477, blue: 0.9568627477, alpha: 1))
+
     func dynamicFont(_ baseSize: CGFloat) -> Font {
         let size = accessibilitySettings.isLargeText ? baseSize + 4 : baseSize
-        return .system(size: size)
+        return .system(size: size, weight: .semibold, design: .rounded)
     }
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 20) {
-                // 상단 배너(공지) - 간결화
-                if !storeNotice.isEmpty {
-                    VStack(spacing: 4) {
-                        Text("매장 공지")
-                            .font(dynamicFont(18)).bold()
-                        Text(storeNotice)
-                            .font(dynamicFont(20)).bold()
-                            .multilineTextAlignment(.center)
+            ZStack {
+                backgroundColor.edgesIgnoringSafeArea(.all)
+
+                ScrollView {
+                    VStack(spacing: 25) {
+                        noticeView
+                        welcomeView
+                        orderButtons
+                        accessibilityButton
+                        helpButton
                     }
-                    .padding()
-                    .background(Color.yellow.opacity(0.25))
-                    .cornerRadius(12)
-                    .accessibilityElement()
-                    .accessibilityLabel("매장 공지: \(storeNotice)")
+                    .padding(.top, accessibilitySettings.isAccessibilityMode ? 100 : 20)
+                    .padding(.horizontal)
                 }
-
-                Spacer()
-
-                Text("어서오세요!")
-                    .font(dynamicFont(28)).bold()
-                    .accessibilityAddTraits(.isHeader)
-
-                // 브랜드 로고(예시 이미지)
-                Image(systemName: "house.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 120, height: 120)
-                    .accessibilityLabel("브랜드 로고 - 예시 이미지")
-
-                // 주문/결제를 한 번에 진행할 수 있는 화면으로 이동
-                ScalableButton(action: {}) {
-                    NavigationLink(destination:
-                        OneStopOrderView()
-                            .environmentObject(accessibilitySettings)
-                    ) {
-                        Text("주문하기")
-                            .font(dynamicFont(22)).bold()
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(accessibilitySettings.isHighContrast ? Color.black : Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                    }
-                }
-                .padding(.horizontal, 50)
-                .accessibilityLabel("주문하기 버튼")
-
-                // 음성 주문 화면
-                ScalableButton {
-                    // 이동
-                } label: {
-                    NavigationLink(
-                        destination: VoiceOrderView().environmentObject(accessibilitySettings)
-                    ) {
-                        Text("음성으로 주문하기")
-                            .font(dynamicFont(20)).bold()
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(accessibilitySettings.isHighContrast ? Color.black : Color.green)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                    }
-                }
-                .padding(.horizontal, 50)
-                .accessibilityLabel("음성으로 주문하기 버튼")
-
-                // 직원 호출
-                ScalableButton {
-                    // 실제직원 호출 로직 (서버, BLE, 알림 등)
-                } label: {
-                    Text("직원 호출")
-                        .font(dynamicFont(20)).bold()
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(accessibilitySettings.isHighContrast ? Color.black : Color.red)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
-                .padding(.horizontal, 50)
-                .accessibilityLabel("직원 호출 버튼")
-
-                // 접근성 설정
-                NavigationLink(destination: AccessibilityConfigView()
-                    .environmentObject(accessibilitySettings)) {
-                    Text("접근성 설정")
-                        .font(dynamicFont(18)).bold()
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(accessibilitySettings.isHighContrast ? Color.black : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal, 50)
-                .accessibilityLabel("접근성 설정 화면으로 이동")
-
-                Spacer()
-
-                // 도움말 보기
-                NavigationLink(destination: HelpView().environmentObject(accessibilitySettings)) {
-                    Text("도움말 보기")
-                        .font(dynamicFont(18)).bold()
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(accessibilitySettings.isHighContrast ? Color.black : Color.gray.opacity(0.8))
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-                .accessibilityLabel("도움말 보기 버튼")
-                .padding(.horizontal, 50)
-
-                Spacer()
             }
-            .padding(.top, accessibilitySettings.isAccessibilityMode ? 100 : 20)
             .navigationBarTitle("키오스크 홈", displayMode: .inline)
         }
-        // 전역 환경객체 적용(접근성 세팅)
         .environmentObject(accessibilitySettings)
+    }
+
+    var noticeView: some View {
+        VStack(spacing: 4) {
+            Text("매장 공지")
+                .font(dynamicFont(18))
+            Text(storeNotice)
+                .font(dynamicFont(20))
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 15)
+                .fill(Color.yellow.opacity(0.2))
+                .shadow(color: .gray.opacity(0.2), radius: 5, x: 0, y: 2)
+        )
+        .accessibilityElement()
+        .accessibilityLabel("매장 공지: \(storeNotice)")
+    }
+
+    var welcomeView: some View {
+        VStack(spacing: 15) {
+            Text("어서오세요!")
+                .font(dynamicFont(32))
+                .fontWeight(.bold)
+                .accessibilityAddTraits(.isHeader)
+
+            Image(systemName: "house.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 100, height: 100)
+                .foregroundColor(primaryColor)
+                .accessibilityLabel("브랜드 로고")
+        }
+    }
+
+    var orderButtons: some View {
+        VStack(spacing: 20) {
+            navigationButton(title: "주문하기", icon: "cart.fill", color: primaryColor, destination: OneStopOrderView())
+            navigationButton(title: "음성으로 주문하기", icon: "waveform", color: secondaryColor, destination: VoiceOrderView())
+            actionButton(title: "직원 호출", icon: "bell.fill", color: .red) {
+                // 직원 호출 로직
+            }
+        }
+    }
+
+    var accessibilityButton: some View {
+        navigationButton(title: "접근성 설정", icon: "person.crop.circle", color: .gray, destination: AccessibilityConfigView())
+    }
+
+    var helpButton: some View {
+        navigationButton(title: "도움말 보기", icon: "questionmark.circle", color: .gray, destination: HelpView())
+    }
+
+    func navigationButton<Destination: View>(title: String, icon: String, color: Color, destination: Destination) -> some View {
+        NavigationLink(destination: destination.environmentObject(accessibilitySettings)) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                Text(title)
+                    .font(dynamicFont(20))
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 15)
+                    .fill(color)
+                    .shadow(color: color.opacity(0.3), radius: 5, x: 0, y: 3)
+            )
+            .foregroundColor(.white)
+        }
+        .accessibilityLabel("\(title) 버튼")
+    }
+
+    func actionButton(title: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 22))
+                Text(title)
+                    .font(dynamicFont(20))
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 15)
+                    .fill(color)
+                    .shadow(color: color.opacity(0.3), radius: 5, x: 0, y: 3)
+            )
+            .foregroundColor(.white)
+        }
+        .accessibilityLabel("\(title) 버튼")
     }
 }
 
