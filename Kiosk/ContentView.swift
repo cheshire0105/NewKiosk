@@ -1,594 +1,654 @@
 import SwiftUI
-import AVFoundation   // 음성 안내(TTS), 알림음 등 (필요 시)
-import Speech        // 음성 인식 (실제 구현 시 Info.plist 권한 추가 필요)
+import AVFoundation
+import Speech
 
-// MARK: - 전역 환경설정(접근성) 모델
-class AccessibilitySettings: ObservableObject {
-    @Published var isAccessibilityMode: Bool = false   // 휠체어/어린이 모드
-    @Published var isLargeText: Bool = false           // 큰 글자 모드
-    @Published var isHighContrast: Bool = false        // 고대비 모드
+// MARK: - 데이터 모델
+struct MenuItem: Identifiable, Hashable {
+    let id = UUID()
+    let category: String
+    let name: String
+    let price: Int
+    let description: String
+    let icon: String
 }
 
-// MARK: - 메인(시작) 화면
+struct CartItem: Identifiable {
+    let id = UUID()
+    let item: MenuItem
+    var quantity: Int
+}
+
+// MARK: - 전역 설정
+class AccessibilitySettings: ObservableObject {
+    @Published var isAccessibilityMode = false
+    @Published var isLargeText = false
+    @Published var isHighContrast = false
+}
+
+// MARK: - 디자인 시스템
+struct AppColor {
+    static let primary = Color(#colorLiteral(red: 0.44, green: 0.31, blue: 0.22, alpha: 1))
+    static let secondary = Color(#colorLiteral(red: 0.85, green: 0.65, blue: 0.45, alpha: 1))
+    static let accent = Color(#colorLiteral(red: 0.92, green: 0.49, blue: 0.32, alpha: 1))
+    static let background = Color(#colorLiteral(red: 0.96, green: 0.94, blue: 0.91, alpha: 1))
+    static let card = Color.white
+    static let textPrimary = Color(#colorLiteral(red: 0.15, green: 0.11, blue: 0.07, alpha: 1))
+    static let textSecondary = Color(#colorLiteral(red: 0.44, green: 0.44, blue: 0.44, alpha: 1))
+}
+
+struct AppFont {
+    static func bold(_ size: CGFloat) -> Font { .system(size: size, weight: .bold, design: .rounded) }
+    static func medium(_ size: CGFloat) -> Font { .system(size: size, weight: .medium, design: .rounded) }
+}
+
+// MARK: - 메인 홈 화면
 struct KioskHomeView: View {
-    @StateObject private var accessibilitySettings = AccessibilitySettings()
-    @State private var storeNotice: String = "신메뉴 '딸기 라떼' 할인 중!"
-
-    // 색상 테마
-    let primaryColor = Color(#colorLiteral(red: 0.2392156869, green: 0.6745098233, blue: 0.9686274529, alpha: 1))
-    let secondaryColor = Color(#colorLiteral(red: 0.2196078449, green: 0.007843137719, blue: 0.8549019694, alpha: 1))
-    let backgroundColor = Color(#colorLiteral(red: 0.9568627477, green: 0.9568627477, blue: 0.9568627477, alpha: 1))
-
-    func dynamicFont(_ baseSize: CGFloat) -> Font {
-        let size = accessibilitySettings.isLargeText ? baseSize + 4 : baseSize
-        return .system(size: size, weight: .semibold, design: .rounded)
-    }
+    @StateObject var settings = AccessibilitySettings()
+    @State private var cartItems: [CartItem] = []
 
     var body: some View {
         NavigationView {
             ZStack {
-                backgroundColor.edgesIgnoringSafeArea(.all)
+                AppColor.background.ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 25) {
-                        noticeView
-                        welcomeView
-                        orderButtons
-                        accessibilityButton
-                        helpButton
+                    VStack(spacing: 30) {
+                        NotificationBanner()
+                        BrandHeader()
+                        MainActionGrid(cartItems: $cartItems)
+                        QuickMenuSection()
+                        SettingsSection()
                     }
-                    .padding(.top, accessibilitySettings.isAccessibilityMode ? 100 : 20)
-                    .padding(.horizontal)
+                    .padding(.vertical, 30)
                 }
             }
-            .navigationBarTitle("키오스크 홈", displayMode: .inline)
-        }
-        .environmentObject(accessibilitySettings)
-    }
-
-    var noticeView: some View {
-        VStack(spacing: 4) {
-            Text("매장 공지")
-                .font(dynamicFont(18))
-            Text(storeNotice)
-                .font(dynamicFont(20))
-                .multilineTextAlignment(.center)
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 15)
-                .fill(Color.yellow.opacity(0.2))
-                .shadow(color: .gray.opacity(0.2), radius: 5, x: 0, y: 2)
-        )
-        .accessibilityElement()
-        .accessibilityLabel("매장 공지: \(storeNotice)")
-    }
-
-    var welcomeView: some View {
-        VStack(spacing: 15) {
-            Text("어서오세요!")
-                .font(dynamicFont(32))
-                .fontWeight(.bold)
-                .accessibilityAddTraits(.isHeader)
-
-            Image(systemName: "house.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 100, height: 100)
-                .foregroundColor(primaryColor)
-                .accessibilityLabel("브랜드 로고")
-        }
-    }
-
-    var orderButtons: some View {
-        VStack(spacing: 20) {
-            navigationButton(title: "주문하기", icon: "cart.fill", color: primaryColor, destination: OneStopOrderView())
-            navigationButton(title: "음성으로 주문하기", icon: "waveform", color: secondaryColor, destination: VoiceOrderView())
-            actionButton(title: "직원 호출", icon: "bell.fill", color: .red) {
-                // 직원 호출 로직
+            .navigationTitle("☕️ Bean & Brew")
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Bean & Brew")
+                        .font(AppFont.bold(22))
+                        .foregroundColor(AppColor.textPrimary)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    CartButton(cartItems: $cartItems)
+                }
             }
         }
-    }
-
-    var accessibilityButton: some View {
-        navigationButton(title: "접근성 설정", icon: "person.crop.circle", color: .gray, destination: AccessibilityConfigView())
-    }
-
-    var helpButton: some View {
-        navigationButton(title: "도움말 보기", icon: "questionmark.circle", color: .gray, destination: HelpView())
-    }
-
-    func navigationButton<Destination: View>(title: String, icon: String, color: Color, destination: Destination) -> some View {
-        NavigationLink(destination: destination.environmentObject(accessibilitySettings)) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.system(size: 22))
-                Text(title)
-                    .font(dynamicFont(20))
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(color)
-                    .shadow(color: color.opacity(0.3), radius: 5, x: 0, y: 3)
-            )
-            .foregroundColor(.white)
-        }
-        .accessibilityLabel("\(title) 버튼")
-    }
-
-    func actionButton(title: String, icon: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.system(size: 22))
-                Text(title)
-                    .font(dynamicFont(20))
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(color)
-                    .shadow(color: color.opacity(0.3), radius: 5, x: 0, y: 3)
-            )
-            .foregroundColor(.white)
-        }
-        .accessibilityLabel("\(title) 버튼")
+        .environmentObject(settings)
     }
 }
 
-// MARK: - 한 화면에서 카테고리별 메뉴와 장바구니를 확인하고 결제 화면으로 이동
-struct OneStopOrderView: View {
-    @EnvironmentObject var accessibilitySettings: AccessibilitySettings
+// MARK: - 홈 화면 컴포넌트
+struct NotificationBanner: View {
+    var body: some View {
+        HStack {
+            Image(systemName: "leaf.fill")
+            Text("🎃 가을 시즌 한정 메뉴! 호박 스파이스 라떼 10% 할인")
+                .font(AppFont.medium(16))
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(LinearGradient(gradient: Gradient(colors: [AppColor.accent, Color.orange]), startPoint: .leading, endPoint: .trailing))
+        .foregroundColor(.white)
+        .cornerRadius(12)
+        .padding(.horizontal, 20)
+    }
+}
 
-    // 카테고리
-    let categories: [String] = ["세트메뉴", "단품", "음료", "디저트"]
-    @State private var selectedCategory: String = "세트메뉴"
+struct BrandHeader: View {
+    @EnvironmentObject var settings: AccessibilitySettings
 
-    // 장바구니
-    @State private var cartItems: [String] = []
+    var body: some View {
+        VStack(spacing: 15) {
+            Image(systemName: "cup.and.saucer.fill")
+                .font(.system(size: 60))
+                .foregroundColor(AppColor.primary)
 
-    // 간단 샘플 메뉴(하드코딩)
-    func sampleMenus(for category: String) -> [MenuItem] {
-        switch category {
-        case "세트메뉴":
-            return [
-                MenuItem(name: "버거 세트", price: 7000, description: "버거+감자튀김+음료", imageName: "fork.knife.circle"),
-                MenuItem(name: "치킨 세트", price: 8000, description: "치킨+감자튀김+음료", imageName: "fork.knife.circle")
-            ]
-        case "단품":
-            return [
-                MenuItem(name: "햄버거", price: 4000, description: "순쇠고기 패티 버거", imageName: "fork.knife.circle"),
-                MenuItem(name: "치킨조각", price: 3000, description: "바삭 치킨 조각", imageName: "fork.knife.circle")
-            ]
-        case "음료":
-            return [
-                MenuItem(name: "콜라", price: 2000, description: "탄산이 톡 쏘는 콜라", imageName: "fork.knife.circle"),
-                MenuItem(name: "사이다", price: 2000, description: "깔끔한 청량감 사이다", imageName: "fork.knife.circle"),
-                MenuItem(name: "커피", price: 3000, description: "아메리카노 (HOT/ICE)", imageName: "fork.knife.circle"),
-                MenuItem(name: "딸기 라떼", price: 3500, description: "신메뉴! 상큼한 딸기+우유", imageName: "fork.knife.circle")
-            ]
-        case "디저트":
-            return [
-                MenuItem(name: "아이스크림", price: 2500, description: "부드러운 바닐라 아이스크림", imageName: "fork.knife.circle"),
-                MenuItem(name: "파이", price: 2000, description: "사과/고구마 파이 중 택1", imageName: "fork.knife.circle")
-            ]
-        default:
-            return []
+            Text("원두의 향기, 특별한 순간")
+                .font(settings.isLargeText ? AppFont.medium(18) : AppFont.medium(16))
+                .foregroundColor(AppColor.textSecondary)
         }
     }
+}
 
-    // 폰트 동적 조절
-    func dynamicFont(_ baseSize: CGFloat) -> Font {
-        let size = accessibilitySettings.isLargeText ? baseSize + 4 : baseSize
-        return .system(size: size)
+struct MainActionGrid: View {
+    @Binding var cartItems: [CartItem]
+
+    var body: some View {
+        VStack(spacing: 15) {
+            NavigationLink(destination: MenuOrderView(cartItems: $cartItems)) {
+                ActionButton(icon: "mug.fill", title: "메뉴 주문", subtitle: "직접 선택하여 주문")
+            }
+
+            NavigationLink(destination: VoiceOrderView()) {
+                ActionButton(icon: "waveform", title: "음성 주문", subtitle: "말로 쉽게 주문")
+            }
+
+            Button(action: {}) {
+                ActionButton(icon: "gift.fill", title: "e-Gift Card", subtitle: "디지털 상품권 구매")
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+}
+
+struct ActionButton: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 20) {
+            Image(systemName: icon)
+                .font(.title)
+                .frame(width: 50)
+
+            VStack(alignment: .leading) {
+                Text(title).font(AppFont.bold(18))
+                Text(subtitle).font(AppFont.medium(14))
+            }
+            Spacer()
+        }
+        .padding(20)
+        .foregroundColor(.white)
+        .background(AppColor.primary)
+        .cornerRadius(15)
+    }
+}
+
+struct QuickMenuSection: View {
+    let quickMenus = [
+        ("☕️ 아메리카노", "2,500원"),
+        ("🍵 녹차 라떼", "3,800원"),
+        ("🥐 크루아상", "3,200원"),
+        ("🎁 e-Gift Card", "선물하기")
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
+            ForEach(quickMenus, id: \.0) { item in
+                QuickMenuItem(title: item.0, price: item.1)
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+}
+
+struct QuickMenuItem: View {
+    let title: String
+    let price: String
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(title).font(AppFont.medium(16))
+                Text(price).font(AppFont.medium(14))
+            }
+            Spacer()
+        }
+        .padding(15)
+        .background(AppColor.card)
+        .cornerRadius(12)
+        .shadow(radius: 2)
+    }
+}
+
+// MARK: - 메뉴 주문 화면
+struct MenuOrderView: View {
+    @EnvironmentObject var settings: AccessibilitySettings
+    @Binding var cartItems: [CartItem]
+    @State private var selectedCategory = 0
+
+    let categories = ["에스프레소", "브루드", "차", "베이커리", "시즌"]
+    let menuItems: [[MenuItem]] = [
+        [
+            MenuItem(category: "에스프레소", name: "아메리카노", price: 2500, description: "에스프레소 샷 + 뜨거운 물", icon: "☕️"),
+            MenuItem(category: "에스프레소", name: "카페 라떼", price: 3500, description: "우유와 에스프레소의 조화", icon: "🥛")
+        ],
+        [
+            MenuItem(category: "브루드", name: "콜드 브루", price: 3800, description: "12시간 추출 커피", icon: "💧"),
+            MenuItem(category: "브루드", name: "디카페인", price: 4000, description: "카페인 FREE", icon: "🌱")
+        ],
+        [
+            MenuItem(category: "차", name: "녹차 라떼", price: 3800, description: "신선한 말차 파우더", icon: "🍵"),
+            MenuItem(category: "차", name: "히비스커스 티", price: 3200, description: "상큼한 허브 티", icon: "🌺")
+        ],
+        [
+            MenuItem(category: "베이커리", name: "크루아상", price: 3200, description: "버터 풍미 가득", icon: "🥐"),
+            MenuItem(category: "베이커리", name: "마들렌", price: 2800, description: "수제 마들렌 3개", icon: "🧁")
+        ],
+        [
+            MenuItem(category: "시즌", name: "호박 라떼", price: 4200, description: "가을 한정 메뉴", icon: "🎃"),
+            MenuItem(category: "시즌", name: "아이스 초코", price: 3800, description: "진한 초콜릿 풍미", icon: "❄️")
+        ]
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            CategoryTabBar(selectedCategory: $selectedCategory)
+
+            ScrollView {
+                LazyVStack(spacing: 15) {
+                    ForEach(menuItems[selectedCategory], id: \.id) { item in
+                        MenuItemView(item: item, cartItems: $cartItems)
+                    }
+                }
+                .padding(20)
+            }
+
+            OrderSummaryView(cartItems: $cartItems)
+        }
+        .background(AppColor.background)
+    }
+}
+
+struct CategoryTabBar: View {
+    @Binding var selectedCategory: Int
+    let categories = ["에스프레소", "브루드", "차", "베이커리", "시즌"]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                ForEach(0..<categories.count, id: \.self) { index in
+                    Button(action: { selectedCategory = index }) {
+                        Text(categories[index])
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(selectedCategory == index ? AppColor.primary : Color.clear)
+                            .cornerRadius(20)
+                            .foregroundColor(selectedCategory == index ? .white : AppColor.textPrimary)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .background(AppColor.card.shadow(radius: 2))
+    }
+}
+
+struct MenuItemView: View {
+    let item: MenuItem
+    @Binding var cartItems: [CartItem]
+
+    private var quantity: Int {
+        cartItems.first(where: { $0.item.id == item.id })?.quantity ?? 0
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            Text("간편 주문")
-                .font(dynamicFont(28)).bold()
-                .padding(.top)
+        HStack(spacing: 15) {
+            Text(item.icon).font(.system(size: 32))
 
-            // 카테고리 선택
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(categories, id: \.self) { category in
-                        ScalableButton {
-                            withAnimation {
-                                selectedCategory = category
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.name).font(AppFont.bold(16))
+                Text(item.description).font(AppFont.medium(14)).foregroundColor(AppColor.textSecondary)
+            }
+
+            Spacer()
+
+            VStack {
+                Text("\(item.price)원").font(AppFont.medium(16))
+                HStack {
+                    Button(action: decreaseQuantity) {
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundColor(quantity > 0 ? AppColor.accent : .gray)
+                    }
+                    .disabled(quantity == 0)
+
+                    Text("\(quantity)")
+                        .font(AppFont.medium(16))
+                        .frame(width: 30)
+
+                    Button(action: increaseQuantity) {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(AppColor.accent)
+                    }
+                }
+            }
+        }
+        .padding(15)
+        .background(AppColor.card)
+        .cornerRadius(12)
+        .shadow(radius: 2)
+    }
+
+    private func increaseQuantity() {
+        if let index = cartItems.firstIndex(where: { $0.item.id == item.id }) {
+            cartItems[index].quantity += 1
+        } else {
+            cartItems.append(CartItem(item: item, quantity: 1))
+        }
+    }
+
+    private func decreaseQuantity() {
+        guard let index = cartItems.firstIndex(where: { $0.item.id == item.id }) else { return }
+        if cartItems[index].quantity > 1 {
+            cartItems[index].quantity -= 1
+        } else {
+            cartItems.remove(at: index)
+        }
+    }
+}
+
+// MARK: - 주문 요약
+struct OrderSummaryView: View {
+    @Binding var cartItems: [CartItem]
+
+    var totalPrice: Int {
+        cartItems.reduce(0) { $0 + ($1.item.price * $1.quantity) }
+    }
+
+    var body: some View {
+        VStack(spacing: 15) {
+            NavigationLink(destination: CartDetailView(cartItems: $cartItems)) {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("주문 예정 \(cartItems.count)개")
+                            .font(AppFont.bold(16))
+                        Text("\(totalPrice)원")
+                            .font(AppFont.medium(14))
+                            .foregroundColor(AppColor.textSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }
+                .padding()
+                .background(AppColor.card)
+                .cornerRadius(12)
+            }
+
+            NavigationLink(destination: PaymentView(cartItems: $cartItems)) {
+                Text("결제 진행하기")
+                    .font(AppFont.bold(16))
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(AppColor.primary)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+            }
+        }
+        .padding(20)
+        .background(AppColor.card.shadow(radius: 5))
+    }
+}
+
+// MARK: - 장바구니 상세 화면
+struct CartDetailView: View {
+    @Binding var cartItems: [CartItem]
+    @Environment(\.presentationMode) var presentationMode
+
+    var totalPrice: Int {
+        cartItems.reduce(0) { $0 + ($1.item.price * $1.quantity) }
+    }
+
+    var body: some View {
+        VStack {
+            List {
+                ForEach(cartItems) { cartItem in
+                    HStack {
+                        Text(cartItem.item.icon)
+                            .font(.system(size: 32))
+                        VStack(alignment: .leading) {
+                            Text(cartItem.item.name)
+                                .font(AppFont.bold(16))
+                            Text("\(cartItem.item.price)원 x \(cartItem.quantity)")
+                                .font(AppFont.medium(14))
+                                .foregroundColor(AppColor.textSecondary)
+                        }
+                        Spacer()
+                        Text("\(cartItem.item.price * cartItem.quantity)원")
+                            .font(AppFont.medium(16))
+                    }
+                    .swipeActions {
+                        Button(role: .destructive) {
+                            if let index = cartItems.firstIndex(where: { $0.id == cartItem.id }) {
+                                cartItems.remove(at: index)
                             }
                         } label: {
-                            Text(category)
-                                .font(dynamicFont(18)).bold()
-                                .padding()
-                                .background(
-                                    selectedCategory == category
-                                    ? (accessibilitySettings.isHighContrast ? Color.black : Color.orange)
-                                    : Color.gray
-                                )
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
+                            Label("삭제", systemImage: "trash")
                         }
-                        .accessibilityLabel("\(category) 카테고리 버튼")
                     }
                 }
-                .padding(.horizontal)
             }
+            .listStyle(.plain)
 
-            // 선택된 카테고리의 메뉴 리스트
-            let menus = sampleMenus(for: selectedCategory)
-            if menus.isEmpty {
-                Text("아직 준비된 메뉴가 없습니다.")
-                    .font(dynamicFont(18))
-                    .foregroundColor(.secondary)
-                    .padding()
-            } else {
-                ScrollView {
-                    VStack(spacing: 8) {
-                        ForEach(menus, id: \.id) { menu in
-                            ScalableButton {
-                                // 메뉴를 장바구니에 담기
-                                cartItems.append(menu.name)
-                            } label: {
-                                HStack {
-                                    Image(systemName: menu.imageName)
-                                        .resizable()
-                                        .frame(width: 40, height: 40)
-                                        .foregroundColor(.blue)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(menu.name)
-                                            .font(dynamicFont(20)).bold()
-                                        Text("₩\(menu.price)")
-                                            .font(dynamicFont(16))
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                }
-                                .padding()
-                                .background(Color.white)
-                                .cornerRadius(10)
-                                .shadow(radius: 1)
-                            }
-                            .accessibilityLabel("\(menu.name) 장바구니에 담기 버튼")
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
+            VStack(spacing: 15) {
+                HStack {
+                    Text("총 결제 금액")
+                        .font(AppFont.bold(18))
+                    Spacer()
+                    Text("\(totalPrice)원")
+                        .font(AppFont.bold(18))
                 }
-            }
 
-            // 장바구니 영역
-            VStack(spacing: 8) {
-                Text("장바구니 (\(cartItems.count)개)")
-                    .font(dynamicFont(20)).bold()
-
-                if cartItems.isEmpty {
-                    Text("아직 메뉴를 담지 않았습니다.")
-                        .font(dynamicFont(16))
-                        .foregroundColor(.secondary)
-                } else {
-                    // 간단 리스트
-                    ScrollView {
-                        ForEach(cartItems.indices, id: \.self) { idx in
-                            HStack {
-                                Text(cartItems[idx])
-                                    .font(dynamicFont(16))
-                                Spacer()
-                                // 삭제 버튼
-                                Button(action: {
-                                    cartItems.remove(at: idx)
-                                }, label: {
-                                    Image(systemName: "trash")
-                                        .foregroundColor(.red)
-                                })
-                                .accessibilityLabel("장바구니 \(cartItems[idx]) 삭제 버튼")
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                    .frame(height: 100) // 적절히 높이 제한
+                NavigationLink(destination: PaymentView(cartItems: $cartItems)) {
+                    Text("결제 진행하기")
+                        .font(AppFont.bold(16))
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppColor.primary)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
                 }
             }
             .padding()
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(12)
-            .padding(.horizontal)
-
-            // "결제하기" 버튼 → 별도 PaymentView로 이동
-            NavigationLink(
-                destination: PaymentView(
-                    totalPrice: cartItems.count * 5000 // 간단히 개수 × 5000원으로 가정
-                ).environmentObject(accessibilitySettings)
-            ) {
-                Text("결제하기")
-                    .font(dynamicFont(20)).bold()
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(accessibilitySettings.isHighContrast ? Color.black : Color.purple)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-            }
-            .padding(.horizontal)
-            .accessibilityLabel("결제 화면으로 이동")
-
-            Spacer()
+            .background(AppColor.card.shadow(radius: 5))
         }
-        .navigationBarTitle("간편 주문", displayMode: .inline)
+        .navigationTitle("장바구니")
     }
 }
 
-// MARK: - 결제 전용 화면
+// MARK: - 결제 화면
 struct PaymentView: View {
-    @EnvironmentObject var accessibilitySettings: AccessibilitySettings
-    let totalPrice: Int
-
-    @State private var paymentStatus: String? = nil
-
-    // 폰트 동적 조절
-    func dynamicFont(_ baseSize: CGFloat) -> Font {
-        let size = accessibilitySettings.isLargeText ? baseSize + 4 : baseSize
-        return .system(size: size)
-    }
+    @Binding var cartItems: [CartItem]
+    @Environment(\.presentationMode) var presentationMode
+    @State private var paymentSuccess = false
+    @State private var isProcessing = false
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("결제 화면")
-                .font(dynamicFont(28)).bold()
-                .padding(.top)
+        VStack(spacing: 30) {
+            if isProcessing {
+                ProgressView()
+                    .scaleEffect(2.0)
+                Text("결제 처리 중...")
+                    .font(AppFont.medium(18))
+            } else {
+                Image(systemName: paymentSuccess ? "checkmark.circle.fill" : "creditcard.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(paymentSuccess ? .green : AppColor.primary)
 
-            Text("총 결제 금액: ₩\(totalPrice)")
-                .font(dynamicFont(22)).bold()
+                Text(paymentSuccess ? "결제 완료!" : "결제 수단 선택")
+                    .font(AppFont.bold(24))
 
-            // 안내문구: 카드를 꽂아주세요
-            Text("카드를 꽂아주세요")
-                .font(dynamicFont(20))
-                .padding(.bottom, 10)
+                if !paymentSuccess {
+                    HStack(spacing: 20) {
+                        Button(action: { processPayment() }) {
+                            PaymentMethodView(icon: "creditcard.fill", label: "카드 결제")
+                        }
 
-            // 실제 결제 시뮬레이션 (카드/현금)
-            HStack(spacing: 16) {
-                // 카드 결제 시뮬레이션 버튼
-                ScalableButton {
-                    simulatePayment(success: true)
-                } label: {
-                    VStack {
-                        Image(systemName: "creditcard.fill")
-                            .resizable()
-                            .frame(width: 40, height: 28)
-                        Text("카드 결제")
-                            .font(dynamicFont(16)).bold()
+                        Button(action: { processPayment() }) {
+                            PaymentMethodView(icon: "wonsign.circle.fill", label: "현금 결제")
+                        }
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(accessibilitySettings.isHighContrast ? Color.black : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
                 }
 
-                // 현금 결제 시뮬레이션 버튼
-                ScalableButton {
-                    simulatePayment(success: false)
-                } label: {
-                    VStack {
-                        Image(systemName: "banknote.fill")
-                            .resizable()
-                            .frame(width: 40, height: 28)
-                        Text("현금 결제")
-                            .font(dynamicFont(16)).bold()
+                Button(action: {
+                    if paymentSuccess {
+                        cartItems.removeAll()
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(accessibilitySettings.isHighContrast ? Color.black : Color.green)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
+                    presentationMode.wrappedValue.dismiss()
+                }) {
+                    Text(paymentSuccess ? "완료" : "취소")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(AppColor.secondary)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
                 }
             }
-            .padding(.horizontal)
-
-            // 결제 결과 메시지
-            if let paymentStatus = paymentStatus {
-                Text(paymentStatus)
-                    .font(dynamicFont(18)).bold()
-                    .foregroundColor(paymentStatus.contains("성공") ? .green : .red)
-                    .padding(.top, 8)
-                    .accessibilityLabel("결제 결과: \(paymentStatus)")
-            }
-
-            Spacer()
         }
-        .padding(.bottom, 20)
-        .navigationBarTitle("결제 진행", displayMode: .inline)
+        .padding(30)
+        .background(AppColor.background)
     }
 
-    // 결제 시뮬레이션 로직
-    func simulatePayment(success: Bool) {
-        if success {
-            paymentStatus = "결제 성공! 주문이 완료되었습니다."
-        } else {
-            paymentStatus = "결제 실패! 다시 시도해주세요."
+    func processPayment() {
+        isProcessing = true
+        // 2초 후 결제 성공 시뮬레이션
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            paymentSuccess = true
+            isProcessing = false
         }
     }
 }
 
-// MARK: - 음성 인식 주문 화면(간단 예시)
-struct VoiceOrderView: View {
-    @EnvironmentObject var accessibilitySettings: AccessibilitySettings
+struct PaymentMethodView: View {
+    let icon: String
+    let label: String
 
-    @State private var isListening: Bool = false
-    @State private var recognizedText: String = "음성 인식 대기 중..."
-    @State private var cartItems: [String] = []
+    var body: some View {
+        VStack {
+            Image(systemName: icon)
+                .font(.system(size: 40))
+            Text(label).font(AppFont.medium(16))
+        }
+        .padding(20)
+        .frame(width: 150)
+        .background(AppColor.card)
+        .cornerRadius(12)
+    }
+}
 
-    func dynamicFont(_ baseSize: CGFloat) -> Font {
-        let size = accessibilitySettings.isLargeText ? baseSize + 4 : baseSize
-        return .system(size: size)
+// MARK: - 추가 컴포넌트
+struct CartButton: View {
+    @Binding var cartItems: [CartItem]
+
+    var itemCount: Int {
+        cartItems.reduce(0) { $0 + $1.quantity }
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("음성 주문 화면")
-                .font(dynamicFont(28)).bold()
-                .padding(.top)
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "cart.fill")
+                .font(.title)
 
-            Text(recognizedText)
-                .font(dynamicFont(18))
-                .padding()
-
-            // 음성 듣기 시작/중지
-            HStack {
-                ScalableButton {
-                    startListening()
-                } label: {
-                    Text("음성 듣기 시작")
-                        .font(dynamicFont(18)).bold()
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(accessibilitySettings.isHighContrast ? Color.black : Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
-                ScalableButton {
-                    stopListening()
-                } label: {
-                    Text("음성 듣기 중지")
-                        .font(dynamicFont(18)).bold()
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(accessibilitySettings.isHighContrast ? Color.black : Color.red)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
+            if itemCount > 0 {
+                Text("\(itemCount)")
+                    .font(.caption)
+                    .padding(5)
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .clipShape(Circle())
+                    .offset(x: 10, y: -10)
             }
-            .padding(.horizontal)
-
-            // 장바구니 미니 리스트
-            Text("인식으로 추가된 장바구니:")
-                .font(dynamicFont(18)).bold()
-            ForEach(cartItems, id: \.self) { item in
-                Text("· \(item)")
-                    .font(dynamicFont(18))
-            }
-
-            Spacer()
         }
+        .foregroundColor(AppColor.textPrimary)
+    }
+}
+
+// MARK: - 설정 관련 뷰
+struct SettingsSection: View {
+    var body: some View {
+        HStack {
+            NavigationLink(destination: AccessibilityConfigView()) {
+                SettingItem(icon: "person.crop.circle", title: "접근성")
+            }
+            NavigationLink(destination: HelpView()) {
+                SettingItem(icon: "questionmark.circle", title: "도움말")
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+}
+
+struct SettingItem: View {
+    let icon: String
+    let title: String
+
+    var body: some View {
+        VStack {
+            Image(systemName: icon).font(.title)
+            Text(title).font(AppFont.medium(14))
+        }
+        .frame(maxWidth: .infinity)
         .padding()
-        .navigationBarTitle("음성 주문", displayMode: .inline)
-    }
-
-    func startListening() {
-        isListening = true
-        recognizedText = "음성을 듣고 있습니다..."
-        // 실제 음성 인식 로직(마이크 권한, SFSpeechRecognizer 등) 필요
-    }
-
-    func stopListening() {
-        isListening = false
-        recognizedText = "음성 인식을 중지했습니다."
-        // 실제 STT 결과 반영해서 cartItems에 추가하는 로직 필요
+        .background(AppColor.card)
+        .cornerRadius(12)
     }
 }
 
-// MARK: - 접근성 설정 화면
 struct AccessibilityConfigView: View {
-    @EnvironmentObject var accessibilitySettings: AccessibilitySettings
+    @EnvironmentObject var settings: AccessibilitySettings
 
     var body: some View {
         Form {
-            Section(header: Text("접근성 옵션")) {
-                Toggle("화면 아래로 정렬(휠체어/어린이 모드)", isOn: $accessibilitySettings.isAccessibilityMode)
-                Toggle("글씨 크게 보기", isOn: $accessibilitySettings.isLargeText)
-                Toggle("고대비 모드", isOn: $accessibilitySettings.isHighContrast)
+            Section(header: Text("접근성 설정")) {
+                Toggle("큰 글자 모드", isOn: $settings.isLargeText)
+                Toggle("고대비 모드", isOn: $settings.isHighContrast)
             }
         }
-        .navigationBarTitle("접근성 설정", displayMode: .inline)
+        .navigationTitle("설정")
     }
 }
 
-// MARK: - 도움말(Help) 화면
 struct HelpView: View {
-    @EnvironmentObject var accessibilitySettings: AccessibilitySettings
-
-    func dynamicFont(_ baseSize: CGFloat) -> Font {
-        let size = accessibilitySettings.isLargeText ? baseSize + 4 : baseSize
-        return .system(size: size)
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("도움말 화면")
-                    .font(dynamicFont(28)).bold()
-                    .accessibilityAddTraits(.isHeader)
+                Text("자주 묻는 질문")
+                    .font(AppFont.bold(24))
+                    .padding(.bottom)
 
-                Text("""
-- [주문하기] 버튼을 눌러 카테고리를 선택한 뒤, 원하는 메뉴를 선택하면 장바구니에 추가됩니다.
-- 장바구니에서 [결제하기] 버튼을 누르시면 결제 화면으로 이동합니다.
-- 결제 화면에서 "카드를 꽂아주세요" 안내에 따라 카드 결제를 진행하시거나, 현금을 선택하실 수 있습니다.
-- [음성으로 주문하기] 화면에서는 음성 명령을 통해 메뉴를 담을 수 있습니다(실제 앱에서는 마이크 권한 필요).
-- [접근성 설정]에서 어린이/장애인/노인 모드를 위한 여러 옵션(글자 크게, 고대비 등)을 사용하세요.
-- 화면에 표시되는 안내 문구를 잘 확인하시고, 필요 시 [직원 호출] 버튼을 눌러 도움을 받으세요.
-""")
-                    .font(dynamicFont(18))
-
-                Spacer()
+                HelpItem(question: "주문 방법", answer: "메뉴를 선택 후 수량을 조절하고 장바구니에 추가하세요.")
+                HelpItem(question: "결제 방법", answer: "카드 또는 현금 결제를 선택할 수 있습니다.")
+                HelpItem(question: "환불 정책", answer: "제조 시작 전까지 주문 취소가 가능합니다.")
             }
             .padding()
         }
-        .navigationBarTitle("도움말", displayMode: .inline)
+        .navigationTitle("도움말")
     }
 }
 
-// MARK: - 메뉴 상세 정보 모델 (예시용)
-struct MenuItem: Identifiable {
-    let id = UUID()
-    let name: String
-    let price: Int
-    let description: String
-    let imageName: String
-}
-
-// MARK: - ScalableButton: 버튼 탭 시 살짝 커지는 애니메이션 효과
-struct ScalableButton<Label: View>: View {
-    let action: () -> Void
-    let label: () -> Label
-
-    @State private var isPressed: Bool = false
-
-    init(action: @escaping () -> Void,
-         @ViewBuilder label: @escaping () -> Label)
-    {
-        self.action = action
-        self.label = label
-    }
+struct HelpItem: View {
+    let question: String
+    let answer: String
 
     var body: some View {
-        Button {
-            action()
-        } label: {
-            label()
-                .scaleEffect(isPressed ? 0.95 : 1.0)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(question)
+                .font(AppFont.bold(18))
+                .foregroundColor(AppColor.primary)
+            Text(answer)
+                .font(AppFont.medium(16))
         }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    withAnimation(.easeOut(duration: 0.1)) {
-                        isPressed = true
-                    }
-                }
-                .onEnded { _ in
-                    withAnimation(.easeIn(duration: 0.1)) {
-                        isPressed = false
-                    }
-                }
-        )
+        .padding()
+        .background(AppColor.card)
+        .cornerRadius(12)
     }
 }
 
-// MARK: - 미리보기
+// MARK: - 기타 뷰
+struct VoiceOrderView: View {
+    var body: some View {
+        Text("음성 주문 화면")
+            .navigationTitle("🎤 음성 주문")
+    }
+}
+
+// MARK: - 프리뷰
 struct KioskHomeView_Previews: PreviewProvider {
     static var previews: some View {
         KioskHomeView()
     }
 }
+
+struct MenuOrderView_Previews: PreviewProvider {
+    static var previews: some View {
+        MenuOrderView(cartItems: .constant([]))
+    }
+}
+
+struct PaymentView_Previews: PreviewProvider {
+    static var previews: some View {
+        PaymentView(cartItems: .constant([]))
+    }
+}
+
